@@ -1,0 +1,10 @@
+*.beam
+.eunit
+deps/*
+apps/rt53/ebin
+dev/*
+rel/
+.fuse*
+.nfs*
+*~
+\#*

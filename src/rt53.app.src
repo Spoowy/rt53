@@ -1,0 +1,18 @@
+{application, rt53, [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {modules, [
+    rt53_app,
+    rt53_sup,
+    rt53_server
+  ]},
+  {applications, [
+    kernel,
+    stdlib
+  ]},
+  {mod, {
+    rt53_app, []
+  }},
+  {env, []}
+]}.
