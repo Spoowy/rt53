@@ -16,24 +16,43 @@ aws_url(Version, Path) -> string:join([?RT53_URL, Version, Path], "/").
 
 
 %% -- ListHostedZones, pp. 17.
--spec list_hosted_zones/0 :: () -> string().
+-spec list_hosted_zones/0 :: () -> hosted_zone_list().
 list_hosted_zones() ->
     URL = aws_url(default, "hostedzone"),
-    Res = send_request(get, URL, []),
-    extract_hosted_zones(Res).
+    parse_hosted_zone_list(send_request(get, URL, [])).
 
--spec list_hosted_zones/2 :: (string(), string()) -> [ {atom(), string()} ] .
+-spec list_hosted_zones/2 :: (string(), string()) -> hosted_zone_list().
 list_hosted_zones(Marker, MaxItems) ->                                      
     URL = aws_url(default, "hostedzone"),
-    Res = send_request(get, URL, [{marker, Marker}, {maxitems, MaxItems}]),
-    extract_hosted_zones(Res).
+    Params = [{marker, Marker}, {maxitems, MaxItems}],
+    parse_hosted_zone_list(send_request(get, URL, Params)).
+ 
+parse_hosted_zone_list(Res) ->
+    ZoneList = xml_to_plist(Res, "//HostedZones/HostedZone", zone_attributes()),
+    AttrList = xml_to_plist(Res, "/", zone_list_attributes()),
+    {hd(AttrList), ZoneList}.
 
-extract_hosted_zones(Res) ->
-    io:format("foo~n"),
-    xml_to_plist(Res, "//HostedZones/HostedZone", 
-                 ["Id", "Name", "CallerReference", "Config/Comment",
-                  "ResourceRecordSetCount"]).
-    
+zone_attributes() ->
+    [ "Id", "Name", "CallerReference", 
+      "Config/Comment", "ResourceRecordSetCount"].
+
+zone_list_attributes() ->
+    ["Marker", "IsTruncated", "NextMarker", "MaxItems"].
+         
+%% -- GetHostedZone, pp. 10
+-spec get_hosted_zone/1 :: (string()) -> zone_info(). 
+get_hosted_zone(Zone) ->
+    ZoneSpec = case lists:prefix("/hostedzone/", Zone) of
+                   true -> Zone;
+                   false -> "/hostedzone/" ++ Zone
+               end,
+    URL = aws_url(default, ZoneSpec),
+    Res = send_request(get, URL, []),
+    PList = xml_to_plist(Res, "//HostedZone", zone_attributes()),
+    NSs = extract_text(Res, "//NameServer"),
+    [PList | {nameserver, NSs}].
+  
+
 
 %%% ------------------------- Internal Functions.
 send_request(get, URL, QueryParameters) ->
