@@ -4,7 +4,10 @@
 -include_lib("xmerl/include/xmerl.hrl").
 
 -compile(export_all).
--export([aws_url/1]).
+-export([aws_url/1, aws_url/2,
+        list_hosted_zones/0, list_hosted_zones/2,
+        get_hosted_zone/1,
+        create_hosted_zone/1, create_hosted_zone/2, create_hosted_zone/3]).
 
 %%% ------------------------- External API.
 -spec aws_url/1 :: (string()) -> string().
@@ -50,9 +53,54 @@ get_hosted_zone(Zone) ->
     Res = send_request(get, URL, []),
     PList = xml_to_plist(Res, "//HostedZone", zone_attributes()),
     NSs = extract_text(Res, "//NameServer"),
-    [PList | {nameserver, NSs}].
-  
+    {PList, {nameserver, NSs}}.
 
+%% -- CreateHostedZone, pp. 3
+-spec create_hosted_zone/1 :: (string()) -> new_zone_info().
+create_hosted_zone(Name) ->
+    create_hosted_zone(Name, binary_to_list(ossp_uuid:make(v4, text)), "").
+
+-spec create_hosted_zone/2 :: (string(), string()) -> new_zone_info().
+create_hosted_zone(Name, Comment) ->
+    create_hosted_zone(Name, binary_to_list(ossp_uuid:make(v4, text)), Comment).
+
+-spec create_hosted_zone/3 :: (string(), string(), string()) -> new_zone_info().
+create_hosted_zone(Name, CallerReference, Comment) -> 
+    Payload = hosted_zone_xml(Name, CallerReference, Comment),
+    URL = aws_url(default, "hostedzone"),
+    parse_new_hosted_zone(send_request(post, URL, Payload)).
+
+hosted_zone_xml(Name, CallerReference, Comment) ->
+    Data = 
+        {'CreateHostedZoneRequest', [{xmlns, ?RT53_NS}],
+         [ {'Name', [Name]},
+           {'CallerReference', [CallerReference]},
+           {'HostedZoneConfig', [{'Comment', [Comment]}]}]},
+    lists:flatten(
+      io_lib:format("~s~n", [xmerl:export_simple([Data], xmerl_xml)])).
+
+parse_new_hosted_zone(Res) ->
+    ZoneInfo = xml_to_plist(Res, "//HostedZone", zone_attributes()),
+    ChangeInfo = xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()),
+    NSs = extract_text(Res, "//NameServers/NameServer"),
+    {ZoneInfo, ChangeInfo, NSs}.
+
+zone_change_attributes() ->
+    ["Id", "Status", "SubmittedAt"].
+
+%% -- DeleteHostedZone, pp. 14
+-spec delete_hosted_zone/1 :: (string()) -> term().
+delete_hosted_zone(Zone) ->    
+    ZoneSpec = case lists:prefix("/hostedzone/", Zone) of
+                   true -> Zone;
+                   false -> "/hostedzone/" ++ Zone
+               end,
+    URL = aws_url(default, ZoneSpec),
+    send_request(delete, URL, []).
+    %% parse_delete_hosted_zone(send_request(delete, URL, [])).
+
+parse_delete_hosted_zone(Res) ->
+    xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()).
 
 %%% ------------------------- Internal Functions.
 send_request(get, URL, QueryParameters) ->
@@ -62,6 +110,28 @@ send_request(get, URL, QueryParameters) ->
     FullURL = append_query_parameters(URL, QueryParameters),
     {ok, {{_HTTPVersion, StatusCode, _StatusString}, _Headers, Body}} =
         httpc:request(get, {FullURL, Headers}, [], []),
+    case StatusCode of
+        200 -> Body;
+        _ -> error(format_error(Body))
+    end;
+send_request(post, URL, Payload) ->
+    {AuthHeader, Time} = rt53_auth:authinfo(),
+    Headers = [{"X-Amzn-Authorization", AuthHeader},
+               {"x-amz-date", Time},
+               {"Content-Length", length(Payload)}],
+    {ok, {{_HTTPVersion, StatusCode, _StatusString}, _Headers, Body}} = 
+        httpc:request(post, {URL, Headers, "text/xml", Payload}, [], []),
+    case StatusCode of
+        201 -> Body;
+        _ -> error(format_error(Body))
+    end;
+send_request(delete, URL, QueryParameters) ->
+    {AuthHeader, Time} = rt53_auth:authinfo(),
+    Headers = [{"X-Amzn-Authorization", AuthHeader},
+               {"x-amz-date", Time}],
+    FullURL = append_query_parameters(URL, QueryParameters),
+    {ok, {{_HTTPVersion, StatusCode, _StatusString}, _Headers, Body}} =
+        httpc:request(delete, {FullURL, Headers}, [], []),
     case StatusCode of
         200 -> Body;
         _ -> error(format_error(Body))
