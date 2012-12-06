@@ -5,8 +5,11 @@
 -define(RT53_SECRET_VAR, "AWS_SECRET_ACCESS_KEY").
 
 
--type zone_info() :: [{atom(), string()}].
--type zone_list_info() :: [{atom(), string()}].
--type hosted_zone_list() :: {zone_list_info(), [zone_info()]}.
+-type zone_info() :: [{atom(), [string()]}].
 
--type new_zone_info() :: term().
+-type zone_list_metadata() :: [{atom(), string()}].
+-type hosted_zone_list() :: {zone_list_metadata(), [zone_info()]}.
+
+-type change_info() :: [{atom(), [string()]}].
+-type nameservers() :: [string()].
+-type new_zone_info() :: {zone_info(), change_info(), nameservers()}.

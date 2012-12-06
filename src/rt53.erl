@@ -67,7 +67,7 @@ get_hosted_zone(Zone) ->
                end,
     URL = aws_url(default, ZoneSpec),
     Res = send_request(get, URL, [], 200),
-    PList = xml_to_plist(Res, "//HostedZone", zone_attributes()),
+    PList = hd(xml_to_plist(Res, "//HostedZone", zone_attributes())),
     NSs = extract_text(Res, "//NameServer"),
     {PList, {nameserver, NSs}}.
 
@@ -96,25 +96,24 @@ hosted_zone_xml(Name, CallerReference, Comment) ->
       io_lib:format("~s~n", [xmerl:export_simple([Data], xmerl_xml)])).
 
 parse_new_hosted_zone(Res) ->
-    ZoneInfo = xml_to_plist(Res, "//HostedZone", zone_attributes()),
-    ChangeInfo = xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()),
+    ZoneInfo = hd(xml_to_plist(Res, "//HostedZone", zone_attributes())),
+    ChgInfo = hd(xml_to_plist(Res, "//ChangeInfo", zone_change_attributes())),
     NSs = extract_text(Res, "//NameServers/NameServer"),
-    {ZoneInfo, ChangeInfo, NSs}.
-
+    {ZoneInfo, ChgInfo, NSs}.
+ 
 zone_change_attributes() ->
-    ["Id", "Status", "SubmittedAt"].
+    ["Id", "Status", "SubmittedAt"]. 
 
 %% -- DeleteHostedZone, pp. 14
--spec delete_hosted_zone/1 :: (string()) -> term().
+-spec delete_hosted_zone/1 :: (string()) -> change_info().
 delete_hosted_zone(Zone) ->    
     ZoneSpec = case lists:prefix("/hostedzone/", Zone) of
                    true -> Zone;
                    false -> "/hostedzone/" ++ Zone
                end,
     URL = aws_url(default, ZoneSpec),
-    send_request(delete, URL, [], 200).
-    %% parse_delete_hosted_zone(send_request(delete, URL, [])).
-
+    hd(parse_delete_hosted_zone(send_request(delete, URL, [], 200))).
+ 
 parse_delete_hosted_zone(Res) ->
     xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()).
 
@@ -182,6 +181,30 @@ extract_text(XMLString, XPath) ->
     [ Text || #xmlText{value=Text} <- xmerl_xpath:string(XPText, XML) ].
  
 %% ------------------------- Tests.
+
+% - live API tests; must have credentials.
+list_hosted_zones_test() ->
+    rt53_auth:start_link(),
+    {MetaData, Zones} = list_hosted_zones(),
+    Err = "AWS Error [InvalidInput]: The specified marker is not valid.",
+    ?assert(is_list(Zones)),
+    ?assert(is_list(MetaData)),
+    ?assertEqual("100", hd(proplists:get_value(max_items, MetaData))),
+    ?assertError(Err, list_hosted_zones(1, 1)).
+
+hosted_zone_test() ->
+    rt53_auth:start_link(),
+    Name = binary_to_list(ossp_uuid:make(v4, text)) ++ ".example.com.",
+    Comment = "EUnit Test",
+    {ZoneInfo, _, _} = create_hosted_zone(Name, Comment),
+    ReportedName = hd(proplists:get_value(name, ZoneInfo)),
+    ?assertEqual(Name, ReportedName),
+    ID = hd(proplists:get_value(id, ZoneInfo)),
+    {ReportedZoneInfo, _} = get_hosted_zone(ID),
+    ?assertEqual(Comment, hd(proplists:get_value(comment, ReportedZoneInfo))),
+    DeleteRes = delete_hosted_zone(ID).
+ 
+% - internal tests.
 aws_url_test() ->
     SingleURL = ?RT53_URL ++ "/path",
     DefaultVersionURL = string:join([?RT53_URL, ?RT53_API, "/path"], "/"),
