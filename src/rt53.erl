@@ -183,7 +183,86 @@ extract_text(XMLString, XPath) ->
  
 %% ------------------------- Tests.
 aws_url_test() ->
-    ?assert(aws_url("/path") =:= string:concat(?RT53_URL, "/path")).
+    SingleURL = ?RT53_URL ++ "/path",
+    DefaultVersionURL = string:join([?RT53_URL, ?RT53_API, "/path"], "/"),
+    CustomVersionURL = string:join([?RT53_URL, "123", "/path"], "/"),
+    ?assertEqual(SingleURL, aws_url("/path")),
+    ?assertEqual(DefaultVersionURL, aws_url(default, "/path")),
+    ?assertEqual(CustomVersionURL, aws_url("123", "/path")).
+
+to_string_test() ->
+    ?assertEqual("String", to_string("String")),
+    ?assertEqual("123", to_string(123)),
+    ?assertEqual("Binary", to_string(<<"Binary">>)),
+    ?assertEqual("atom", to_string(atom)).
+
+append_query_parameters_test() ->
+    Params = [{a, "foo"}, {"B", "quux"}, {c, 123}],
+    URL = "http://example.com/baz",
+    FullURL = "http://example.com/baz?a=foo&B=quux&c=123",
+    ?assertEqual(FullURL, append_query_parameters(URL, Params)),
+    ?assertEqual(URL, append_query_parameters(URL, [])).
+    
+path_to_atom_test() ->
+    ?assertEqual(foo_bar_baz, path_to_atom("FooBarBaz")),
+    ?assertEqual(bar_baz, path_to_atom("Foo/BarBaz")),
+    ?assertEqual(foo, path_to_atom("Foo")),
+    ?assertEqual(foo_bar, path_to_atom("foo_bar")).
+
+xml_to_plist_test() ->
+    Res = xml_to_plist(sample_response(), "//HostedZones/HostedZone", ["Id"]),
+    ?assert(length(Res) =:= 2),
+    ?assertEqual(["/hostedzone/B"], proplists:get_value(id, hd(Res))).
+
+extract_text_test() ->    
+    Res = extract_text(sample_response(), "//Id"),
+    ?assertEqual(["/hostedzone/A", "/hostedzone/B"], Res).
+
+extract_xml_nodes_test() ->
+    { XML, _ } = xmerl_scan:string(sample_response()),
+    NodeList = xmerl_xpath:string("//HostedZones", XML), 
+    Res = extract_xml_nodes(NodeList, ["Id"], []),
+    ?assertEqual([[{id,["/hostedzone/A","/hostedzone/B"]}]], Res).
+
+format_error_test() ->
+    Res = format_error(sample_error()),
+    ?assertEqual("AWS Error [InvalidInput]: The specified marker is not valid.",
+                 Res).
 
 sample_response() ->
-    "<?xml version=\"1.0\"?>\n<ListHostedZonesResponse xmlns=\"https://route53.amazonaws.com/doc/2012-02-29/\"><HostedZones><HostedZone><Id>/hostedzone/Z1ZVH5FQY4XEIK</Id><Name>aws.mxrm.us.</Name><CallerReference>289E160D-31F0-05F6-B6D1-588B4E4160A4</CallerReference><Config><Comment>mxrm.us subdomain</Comment></Config><ResourceRecordSetCount>14</ResourceRecordSetCount></HostedZone><HostedZone><Id>/hostedzone/Z3KTWPFFPHZLKV</Id><Name>masteringchemistrymooc.com.</Name><CallerReference>8D86C9A5-6CEB-0187-A597-44693A71F7F1</CallerReference><Config/><ResourceRecordSetCount>5</ResourceRecordSetCount></HostedZone></HostedZones><IsTruncated>false</IsTruncated><MaxItems>100</MaxItems></ListHostedZonesResponse>".
+    "<?xml version=\"1.0\"?>
+      <ListHostedZonesResponse 
+         xmlns=\"https://route53.amazonaws.com/doc/2012-02-29/\">
+        <HostedZones>
+          <HostedZone>
+            <Id>/hostedzone/A</Id>
+            <Name>foo.example.com.</Name>
+            <CallerReference>289E160D</CallerReference>
+            <Config>
+               <Comment>mxrm.us subdomain</Comment>
+            </Config>
+            <ResourceRecordSetCount>14</ResourceRecordSetCount>
+          </HostedZone>
+          <HostedZone>
+            <Id>/hostedzone/B</Id>
+            <Name>bar.example.com.</Name>
+            <CallerReference>8D86C9A5</CallerReference>
+            <Config/>
+            <ResourceRecordSetCount>5</ResourceRecordSetCount>
+         </HostedZone>
+       </HostedZones>
+       <IsTruncated>false</IsTruncated>
+       <MaxItems>100</MaxItems>
+     </ListHostedZonesResponse>".
+
+sample_error() ->
+    "<?xml version=\"1.0\"?>
+      <ErrorResponse 
+        xmlns=\"https://route53.amazonaws.com/doc/2012-02-29/\">
+        <Error>
+          <Type>Sender</Type>
+          <Code>InvalidInput</Code>
+          <Message>The specified marker is not valid.</Message>
+        </Error>
+        <RequestId>99eb58c4</RequestId>
+      </ErrorResponse>".
