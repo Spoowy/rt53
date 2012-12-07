@@ -161,12 +161,12 @@ change_record_attributes() ->
 
 %% -- ChangeResourceRecordSets, pp. 24 
 change_resource_record_sets(SyntaxType, Parameters, Comment) ->
-    PostData = case SyntaxType of
-                   basic -> generate_basic_rr_xml(Parameters, Comment);
-                   _ -> error("Change type " ++ atom_to_list(SyntaxType) 
-                              ++ " not implemented.")
-               end,
-    PostData.
+    Payload = case SyntaxType of
+                  basic -> generate_basic_rr_xml(Parameters, Comment);
+                  _ -> error("Change type " ++ atom_to_list(SyntaxType) 
+                             ++ " not implemented.")
+              end,
+    parse_change_record(send_request(post, URL, Payload, 200)).
 
 % basic.
 generate_basic_rr_xml(Parameters, Comment) -> 
@@ -193,8 +193,6 @@ generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) ->
                   [{'Value', [Value]} ]}]}]}]},
     generate_basic_change_stanzas(T, [Data | Res]).
 
-    
-    
 % weighted ... not implemented.
 % alias ... not implemented.
 % weighted alias ... not implemented.
