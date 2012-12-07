@@ -11,7 +11,9 @@
         list_hosted_zones/0, list_hosted_zones/2,
         get_hosted_zone/1,
         create_hosted_zone/1, create_hosted_zone/2, create_hosted_zone/3,
-        delete_hosted_zone/1]).
+        delete_hosted_zone/1,
+        list_resource_record_sets/1, list_resource_record_sets/2,
+        get_change/1]).
 
 
 %%% ------------------------- Erlang Housekeeping.
@@ -143,6 +145,20 @@ resource_record_metadata_attributes() ->
     ["IsTruncated", "MaxItems", "NextRecordName", "NextRecordType",
      "NextRecordIdentifier"].
 
+%% -- GetChange, pp. 49
+-spec get_change/1 :: (string()) -> term().
+get_change(ChangeID) -> 
+    ChangeSpec = change_spec(ChangeID),
+    URL = aws_url(default, ChangeSpec),
+    parse_change_record(send_request(get, URL, [], 200)). 
+
+parse_change_record(Res) ->
+    hd(xml_to_plist(Res, "//ChangeInfo", change_record_attributes())).
+
+change_record_attributes() ->
+    ["Id", "Status", "SubmittedAt"].
+    
+
 %%% ------------------------- Internal Functions.
 send_request(Method, URL, Data, ExpectedResultCode) ->
     {AuthHeader, Time} = rt53_auth:authinfo(),
@@ -168,10 +184,14 @@ append_query_parameters(URL, Parameters) ->
     PList = [ to_string(K) ++ "=" ++ to_string(V) || {K, V} <- Parameters ],
     URL ++ "?" ++ string:join(PList, "&").
 
-zone_spec(Zone) ->
-    case lists:prefix("/hostedzone/", Zone) of
-        true -> Zone;
-        false -> "/hostedzone/" ++ Zone
+zone_spec(Zone) -> maybe_add_prefix(Zone, "/hostedzone/").
+
+change_spec(Change) -> maybe_add_prefix(Change, "/change/").
+
+maybe_add_prefix(Term, Prefix) ->
+    case lists:prefix(Prefix, Term) of
+        true -> Term;
+        false -> Prefix ++ Term
     end.
 
 to_string(X) when is_list(X) -> X;
