@@ -33,7 +33,9 @@ aws_url(Path) -> string:concat(?RT53_URL, Path).
 aws_url(default, Path) -> aws_url(?RT53_API, Path);
 aws_url(Version, Path) -> string:join([?RT53_URL, Version, Path], "/").
 
-
+%% Page numbers refer to the function description in the Amazon Route
+%% 53 API Reference document, dated 2012-02-29
+%%
 %% -- ListHostedZones, pp. 17.
 -spec list_hosted_zones/0 :: () -> hosted_zone_list().
 list_hosted_zones() ->
@@ -61,10 +63,7 @@ zone_list_attributes() ->
 %% -- GetHostedZone, pp. 10
 -spec get_hosted_zone/1 :: (string()) -> zone_info(). 
 get_hosted_zone(Zone) ->
-    ZoneSpec = case lists:prefix("/hostedzone/", Zone) of
-                   true -> Zone;
-                   false -> "/hostedzone/" ++ Zone
-               end,
+    ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec),
     Res = send_request(get, URL, [], 200),
     PList = hd(xml_to_plist(Res, "//HostedZone", zone_attributes())),
@@ -107,15 +106,37 @@ zone_change_attributes() ->
 %% -- DeleteHostedZone, pp. 14
 -spec delete_hosted_zone/1 :: (string()) -> change_info().
 delete_hosted_zone(Zone) ->    
-    ZoneSpec = case lists:prefix("/hostedzone/", Zone) of
-                   true -> Zone;
-                   false -> "/hostedzone/" ++ Zone
-               end,
+    ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec),
     hd(parse_delete_hosted_zone(send_request(delete, URL, [], 200))).
  
 parse_delete_hosted_zone(Res) ->
     xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()).
+
+%% -- ListResourceRecordSets, pp. 51
+-spec list_resource_record_sets/1 :: (string()) -> term().
+list_resource_record_sets(Zone) ->
+    list_resource_record_sets(Zone, []).
+
+-spec list_resource_record_sets/2 :: (string(), options()) -> term().
+list_resource_record_sets(Zone, Opts) ->
+    ZoneSpec = zone_spec(Zone),
+    URL = aws_url(default, ZoneSpec ++ "/rrset"),
+    parse_resource_record_sets(send_request(get, URL, Opts, 200)).
+   
+parse_resource_record_sets(Res) ->
+    RRecords = xml_to_plist(Res, "//ResourceRecordSets/ResourceRecordSet",
+                            resource_record_attributes()),
+    Metadata = hd(xml_to_plist(Res, "//ListResourceRecordSetsResponse",
+                               resource_record_metadata_attributes())),
+    {Metadata, RRecords}.
+
+resource_record_attributes() ->
+    ["Name", "Type", "TTL", "ResourceRecords/ResourceRecord/Value"].
+    
+resource_record_metadata_attributes() ->    
+    ["IsTruncated", "MaxItems", "NextRecordName", "NextRecordType",
+     "NextRecordIdentifier"].
 
 %%% ------------------------- Internal Functions.
 send_request(Method, URL, Data, ExpectedResultCode) ->
@@ -142,6 +163,12 @@ append_query_parameters(URL, Parameters) ->
     PList = [ to_string(K) ++ "=" ++ to_string(V) || {K, V} <- Parameters ],
     URL ++ "?" ++ string:join(PList, "&").
 
+zone_spec(Zone) ->
+    case lists:prefix("/hostedzone/", Zone) of
+        true -> Zone;
+        false -> "/hostedzone/" ++ Zone
+    end.
+
 to_string(X) when is_list(X) -> X;
 to_string(X) when is_integer(X) -> integer_to_list(X);
 to_string(X) when is_binary(X) -> binary_to_list(X);
@@ -149,14 +176,20 @@ to_string(X) when is_atom(X) -> atom_to_list(X).
 
 path_to_atom(String) ->
     UpCase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    [Initial | Remainder] = hd(lists:reverse(string:tokens(String, "/"))), 
-    LowerIni = string:to_lower(Initial),
-    UnderStr = lists:map(fun(C) -> case lists:member(C, UpCase) of
-                                       true -> [ "_", string:to_lower(C) ];
-                                       false -> C
-                                   end
-                         end, [LowerIni | Remainder]),
-    list_to_atom(lists:flatten(UnderStr)).
+    case lists:all(fun(C) -> lists:member(C, UpCase) end, String) of
+        true -> list_to_atom(string:to_lower(String));
+        _ ->
+            [Initial | Remainder] = 
+                hd(lists:reverse(string:tokens(String, "/"))), 
+            LowerIni = string:to_lower(Initial),
+            UnderStr = 
+                lists:map(fun(C) -> case lists:member(C, UpCase) of
+                                        true -> [ "_", string:to_lower(C) ];
+                                        false -> C
+                                    end
+                          end, [LowerIni | Remainder]),
+            list_to_atom(lists:flatten(UnderStr))
+    end.
 
 xml_to_plist(XMLString, BasePath, Attrs) -> 
     { XML, _Rest } = xmerl_scan:string(XMLString),
@@ -202,7 +235,7 @@ hosted_zone_test() ->
     ID = hd(proplists:get_value(id, ZoneInfo)),
     {ReportedZoneInfo, _} = get_hosted_zone(ID),
     ?assertEqual(Comment, hd(proplists:get_value(comment, ReportedZoneInfo))),
-    DeleteRes = delete_hosted_zone(ID).
+    delete_hosted_zone(ID).
  
 % - internal tests.
 aws_url_test() ->
@@ -227,6 +260,7 @@ append_query_parameters_test() ->
     ?assertEqual(URL, append_query_parameters(URL, [])).
     
 path_to_atom_test() ->
+    ?assertEqual(quuxor, path_to_atom("QUUXOR")),
     ?assertEqual(foo_bar_baz, path_to_atom("FooBarBaz")),
     ?assertEqual(bar_baz, path_to_atom("Foo/BarBaz")),
     ?assertEqual(foo, path_to_atom("Foo")),
@@ -249,8 +283,8 @@ extract_xml_nodes_test() ->
 
 format_error_test() ->
     Res = format_error(sample_error()),
-    ?assertEqual("AWS Error [InvalidInput]: The specified marker is not valid.",
-                 Res).
+    Err = "AWS Error [InvalidInput]: The specified marker is not valid.",
+    ?assertEqual(Err, Res).
 
 sample_response() ->
     "<?xml version=\"1.0\"?>

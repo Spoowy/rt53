@@ -13,3 +13,4 @@
 -type change_info() :: [{atom(), [string()]}].
 -type nameservers() :: [string()].
 -type new_zone_info() :: {zone_info(), change_info(), nameservers()}.
+-type options() :: [{string(), term()}].
