@@ -31,7 +31,10 @@ aws_url(Path) -> string:concat(?RT53_URL, Path).
                      
 -spec aws_url/2 :: (default | string(), string()) -> string().
 aws_url(default, Path) -> aws_url(?RT53_API, Path);
-aws_url(Version, Path) -> string:join([?RT53_URL, Version, Path], "/").
+aws_url(Version, Path) -> 
+    URL = string:join([?RT53_URL, Version, Path], "/"),
+    RE = "(?<!:)//", % matches // except after :
+    re:replace(URL, RE, "/", [{return, list}]).
 
 %% Page numbers refer to the function description in the Amazon Route
 %% 53 API Reference document, dated 2012-02-29
@@ -132,7 +135,9 @@ parse_resource_record_sets(Res) ->
     {Metadata, RRecords}.
 
 resource_record_attributes() ->
-    ["Name", "Type", "TTL", "ResourceRecords/ResourceRecord/Value"].
+    ["Name", "Type", "TTL", "ResourceRecords/ResourceRecord/Value",
+     "AliasTarget", "HostedZoneId", "DNSName", "SetIdentifier", 
+     "Weight", "Region"].
     
 resource_record_metadata_attributes() ->    
     ["IsTruncated", "MaxItems", "NextRecordName", "NextRecordType",
@@ -175,6 +180,7 @@ to_string(X) when is_binary(X) -> binary_to_list(X);
 to_string(X) when is_atom(X) -> atom_to_list(X).
 
 path_to_atom(String) ->
+    % nb: DNSName returns d_n_s_name, not exactly what you'd expect.
     UpCase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     case lists:all(fun(C) -> lists:member(C, UpCase) end, String) of
         true -> list_to_atom(string:to_lower(String));
@@ -202,7 +208,10 @@ extract_xml_nodes([H | T], Attrs, Res) ->
 
 format_error(Body) ->
     [ Code ] = extract_text(Body, "//Error/Code"),
-    [ Msg ] = extract_text(Body, "//Error/Message"),
+    Msg = case extract_text(Body, "//Error/Message") of
+        [TextMessage] -> TextMessage;
+        _ -> "[No Description Provided]"
+    end, 
     "AWS Error [" ++ Code ++ "]: " ++ Msg.
  
 extract_text(XMLString, XPath) ->
@@ -240,8 +249,8 @@ hosted_zone_test() ->
 % - internal tests.
 aws_url_test() ->
     SingleURL = ?RT53_URL ++ "/path",
-    DefaultVersionURL = string:join([?RT53_URL, ?RT53_API, "/path"], "/"),
-    CustomVersionURL = string:join([?RT53_URL, "123", "/path"], "/"),
+    DefaultVersionURL = string:join([?RT53_URL, ?RT53_API, "path"], "/"),
+    CustomVersionURL = string:join([?RT53_URL, "123", "path"], "/"),
     ?assertEqual(SingleURL, aws_url("/path")),
     ?assertEqual(DefaultVersionURL, aws_url(default, "/path")),
     ?assertEqual(CustomVersionURL, aws_url("123", "/path")).
