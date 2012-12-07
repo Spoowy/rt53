@@ -97,7 +97,7 @@ hosted_zone_xml(Name, CallerReference, Comment) ->
            {'CallerReference', [CallerReference]},
            {'HostedZoneConfig', [{'Comment', [Comment]}]}]},
     lists:flatten(
-      io_lib:format("~s~n", [xmerl:export_simple([Data], xmerl_xml)])).
+      io_lib:format("~s", [xmerl:export_simple([Data], xmerl_xml)])).
 
 parse_new_hosted_zone(Res) ->
     ZoneInfo = hd(xml_to_plist(Res, "//HostedZone", zone_attributes())),
@@ -158,6 +158,50 @@ parse_change_record(Res) ->
 change_record_attributes() ->
     ["Id", "Status", "SubmittedAt"].
     
+
+%% -- ChangeResourceRecordSets, pp. 24 
+change_resource_record_sets(SyntaxType, Parameters, Comment) ->
+    PostData = case SyntaxType of
+                   basic -> generate_basic_rr_xml(Parameters, Comment);
+                   _ -> error("Change type " ++ atom_to_list(SyntaxType) 
+                              ++ " not implemented.")
+               end,
+    PostData.
+
+% basic.
+generate_basic_rr_xml(Parameters, Comment) -> 
+    Data = 
+        {'ChangeResourceRecordSetsRequest', [{xmlns, ?RT53_NS}],
+         [ {'ChangeBatch',
+            [ { 'Comment', [Comment] },
+              { 'Changes', 
+                generate_basic_change_stanzas(Parameters, []) }]}]},
+    lists:flatten(
+      io_lib:format("~s", [xmerl:export_simple([Data], xmerl_xml)])).
+
+generate_basic_change_stanzas([], Res) -> lists:reverse(Res);
+generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) -> 
+    Data = 
+        {'Change',
+         [ {'Action', [Action]},
+           {'ResourceRecordSet',
+            [ {'Name', [Name]},
+              {'Type', [Type]},
+              {'TTL', [TTL]},
+              {'ResourceRecords', 
+               [ {'ResourceRecord',
+                  [{'Value', [Value]} ]}]}]}]},
+    generate_basic_change_stanzas(T, [Data | Res]).
+
+    
+    
+% weighted ... not implemented.
+% alias ... not implemented.
+% weighted alias ... not implemented.
+% latency ... not implemented.
+% latency alias ... not implemented.
+
+
 
 %%% ------------------------- Internal Functions.
 send_request(Method, URL, Data, ExpectedResultCode) ->
