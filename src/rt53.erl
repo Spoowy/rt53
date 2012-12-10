@@ -134,7 +134,7 @@ parse_resource_record_sets(Res) ->
                             resource_record_attributes()),
     Metadata = hd(xml_to_plist(Res, "//ListResourceRecordSetsResponse",
                                resource_record_metadata_attributes())),
-    {Metadata, RRecords}.
+    {Metadata, RRecords}. 
 
 resource_record_attributes() ->
     ["Name", "Type", "TTL", "ResourceRecords/ResourceRecord/Value",
@@ -160,6 +160,13 @@ change_record_attributes() ->
     
 
 %% -- ChangeResourceRecordSets, pp. 24 
+% types not implemented:
+%   - weighted 
+%   - alias
+%   - weighted alias
+%   - latency
+%   - latency alias
+
 change_resource_record_sets(Zone, SyntaxType, Parameters, Comment) ->
     ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec ++ "/rrset"),
@@ -195,13 +202,33 @@ generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) ->
                   [{'Value', [Value]} ]}]}]}]},
     generate_basic_change_stanzas(T, [Data | Res]).
 
-% weighted ... not implemented.
-% alias ... not implemented.
-% weighted alias ... not implemented.
-% latency ... not implemented.
-% latency alias ... not implemented.
+%% -- convenience methods.
+absolutely_delete_hosted_zone(Zone) ->
+    delete_entire_record_set(Zone),
+    delete_hosted_zone(Zone).
 
-
+delete_entire_record_set(Zone) ->
+    NoDeleteTypes = ["SOA", "NS"],
+    {Meta, Sets} = list_resource_record_sets(Zone),
+    Records = lists:filter(fun(R) -> 
+                                   Type = hd(proplists:get_value(type, R)),
+                                   not(lists:member(Type, NoDeleteTypes)) end,
+                           Sets),
+    Specs = lists:map(fun(R) -> record_to_spec(R, delete) end, Records),
+    change_resource_record_sets(Zone, basic, Specs, "automated delete"),
+    case hd(proplists:get_value(is_truncated, Meta)) of 
+        "true" -> delete_entire_record_set(Zone);
+        _  -> ok
+    end.
+                                                             
+                              
+record_to_spec(Record, Action) ->
+    io:format("Record: ~p~n", [Record]),
+    {Action, 
+     hd(proplists:get_value(name, Record)), 
+     hd(proplists:get_value(type, Record)),
+     hd(proplists:get_value(ttl, Record)),
+     hd(proplists:get_value(value, Record))}.
 
 %%% ------------------------- Internal Functions.
 send_request(Method, URL, Data, ExpectedResultCode) ->
@@ -318,9 +345,8 @@ change_rr_basic_test() ->
     {_, Data_1} = list_resource_record_sets(ZoneID),
     ?assertEqual(2, length(Data_1)),
     change_resource_record_sets(ZoneID, basic, 
-                                [{create, Name, txt, 600, 
-                                  "\"Text Record\""}],
-                                "Unit test TXT record creation."),
+                                [{create, "x." ++ Name, a, 600, "10.0.0.4"}],
+                                "Unit test A record creation."),
     {_, Data_2} = list_resource_record_sets(ZoneID),
     ?assertEqual(3, length(Data_2)),
     [A, B, C] = lists:map(fun(X) -> X ++ "." ++ Name end, ["a", "b", "c"]),
@@ -330,13 +356,8 @@ change_rr_basic_test() ->
                                  {create, C, cname, 600, "10.0.0.3"}],
                                 "Unit test"),
     {_, Data_3} = list_resource_record_sets(ZoneID),
-    ?assertEqual(6, length(Data_3)).
-     
-
-
-    %% delete_hosted_zone(ZoneID).
-    
-
+    ?assertEqual(6, length(Data_3)),
+    absolutely_delete_hosted_zone(ZoneID).
 
 % - internal tests.
 aws_url_test() ->
