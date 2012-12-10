@@ -160,7 +160,9 @@ change_record_attributes() ->
     
 
 %% -- ChangeResourceRecordSets, pp. 24 
-change_resource_record_sets(SyntaxType, Parameters, Comment) ->
+change_resource_record_sets(Zone, SyntaxType, Parameters, Comment) ->
+    ZoneSpec = zone_spec(Zone),
+    URL = aws_url(default, ZoneSpec ++ "/rrset"),
     Payload = case SyntaxType of
                   basic -> generate_basic_rr_xml(Parameters, Comment);
                   _ -> error("Change type " ++ atom_to_list(SyntaxType) 
@@ -183,11 +185,11 @@ generate_basic_change_stanzas([], Res) -> lists:reverse(Res);
 generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) -> 
     Data = 
         {'Change',
-         [ {'Action', [Action]},
+         [ {'Action', [string:to_upper(to_string(Action))]},
            {'ResourceRecordSet',
             [ {'Name', [Name]},
-              {'Type', [Type]},
-              {'TTL', [TTL]},
+              {'Type', [string:to_upper(to_string(Type))]},
+              {'TTL', [to_string(TTL)]},
               {'ResourceRecords', 
                [ {'ResourceRecord',
                   [{'Value', [Value]} ]}]}]}]},
@@ -308,6 +310,34 @@ hosted_zone_test() ->
     ?assertEqual(Comment, hd(proplists:get_value(comment, ReportedZoneInfo))),
     delete_hosted_zone(ID).
  
+change_rr_basic_test() ->
+    rt53_auth:start_link(),
+    Name = binary_to_list(ossp_uuid:make(v4, text)) ++ ".example.com.",
+    {ZoneInfo, _, _} = create_hosted_zone(Name, "EUnit Test"),
+    ZoneID = hd(proplists:get_value(id, ZoneInfo)),
+    {_, Data_1} = list_resource_record_sets(ZoneID),
+    ?assertEqual(2, length(Data_1)),
+    change_resource_record_sets(ZoneID, basic, 
+                                [{create, Name, txt, 600, 
+                                  "\"Text Record\""}],
+                                "Unit test TXT record creation."),
+    {_, Data_2} = list_resource_record_sets(ZoneID),
+    ?assertEqual(3, length(Data_2)),
+    [A, B, C] = lists:map(fun(X) -> X ++ "." ++ Name end, ["a", "b", "c"]),
+    change_resource_record_sets(ZoneID, basic,
+                                [{create, A, cname, 600, "10.0.0.1"},
+                                 {create, B, cname, 600, "10.0.0.2"},
+                                 {create, C, cname, 600, "10.0.0.3"}],
+                                "Unit test"),
+    {_, Data_3} = list_resource_record_sets(ZoneID),
+    ?assertEqual(6, length(Data_3)).
+     
+
+
+    %% delete_hosted_zone(ZoneID).
+    
+
+
 % - internal tests.
 aws_url_test() ->
     SingleURL = ?RT53_URL ++ "/path",
