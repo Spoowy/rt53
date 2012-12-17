@@ -1,11 +1,11 @@
 {application, rt53, [
-  {description, ""},
+  {description, "AWS RT 53 Client"},
   {vsn, "1"},
   {registered, []},
   {modules, [
     rt53_app,
     rt53_sup,
-    rt53_server
+    rt53_auth
   ]},
   {applications, [
     kernel,

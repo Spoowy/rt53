@@ -1,6 +1,7 @@
 *.beam
 .eunit
 deps/*
+docs/*
 apps/rt53/ebin
 dev/*
 rel/
