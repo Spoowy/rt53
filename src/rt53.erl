@@ -3,9 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 
--compile(export_all).
-
--export([start/0, stop/0]).
+-export([start/0, start/2, stop/0]).
 
 -export([aws_url/1, aws_url/2,
         list_hosted_zones/0, list_hosted_zones/2,
@@ -13,7 +11,9 @@
         create_hosted_zone/1, create_hosted_zone/2, create_hosted_zone/3,
         delete_hosted_zone/1,
         list_resource_record_sets/1, list_resource_record_sets/2,
-        get_change/1]).
+        get_change/1,
+        change_resource_record_sets/4,
+        absolutely_delete_hosted_zone/1]).
 
 
 %%% ------------------------- Erlang Housekeeping.
@@ -170,7 +170,8 @@ change_record_attributes() ->
 %   - weighted alias
 %   - latency
 %   - latency alias
-
+-spec change_resource_record_sets/4 :: (string(), atom(), [term()], string()) ->
+                                               term().
 change_resource_record_sets(Zone, SyntaxType, Parameters, Comment) ->
     ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec ++ "/rrset"),
@@ -207,6 +208,7 @@ generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) ->
     generate_basic_change_stanzas(T, [Data | Res]).
 
 %% -- convenience methods.
+-spec absolutely_delete_hosted_zone/1 :: (string()) -> term().
 absolutely_delete_hosted_zone(Zone) ->
     delete_entire_record_set(Zone),
     delete_hosted_zone(Zone).
@@ -227,7 +229,6 @@ delete_entire_record_set(Zone) ->
                                                              
                               
 record_to_spec(Record, Action) ->
-    io:format("Record: ~p~n", [Record]),
     {Action, 
      hd(proplists:get_value(name, Record)), 
      hd(proplists:get_value(type, Record)),
