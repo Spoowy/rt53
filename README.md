@@ -1,6 +1,8 @@
 RT53
 ====
 
+An Erlang interface to the RT53 Amazon Web Service.
+
 To Use:
 -------
 
