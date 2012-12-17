@@ -66,8 +66,8 @@ or one prefixed with "/change/".
 
 The environment variables 
 
-  AWS_ACCESS_KEY_ID=<key>
-  AWS_SECRET_ACCESS_KEY=<secret>
+    AWS_ACCESS_KEY_ID=<key>
+    AWS_SECRET_ACCESS_KEY=<secret>
 
 have been set.
 
