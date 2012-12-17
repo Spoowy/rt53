@@ -5,7 +5,7 @@
 
 -compile(export_all).
 
--export([start/0, start_link/0, stop/0]).
+-export([start/0, stop/0]).
 
 -export([aws_url/1, aws_url/2,
         list_hosted_zones/0, list_hosted_zones/2,
@@ -17,15 +17,19 @@
 
 
 %%% ------------------------- Erlang Housekeeping.
-start_link() ->
-    rt53_sup:start_link().
+start() ->    
+    application:set_env(rt53, ?RT53_KEY_VAR, os:getenv(?RT53_KEY_VAR)),
+    application:set_env(rt53, ?RT53_SECRET_VAR, os:getenv(?RT53_SECRET_VAR)),
+    application:start(rt53).
 
-start() ->
+start(Key, Secret) ->
+    application:set_env(rt53, ?RT53_KEY_VAR, Key),
+    application:set_env(rt53, ?RT53_SECRET_VAR, Secret),
     application:start(rt53).
 
 stop() ->
     application:stop(rt53).
-
+    
 
 %%% ------------------------- External API.
 -spec aws_url/1 :: (string()) -> string().

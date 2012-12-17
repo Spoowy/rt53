@@ -3,6 +3,7 @@
 %% rt53 application
 %%
 -module(rt53_app).
+-include("../include/rt53.hrl").
 
 -behaviour(application).
 
@@ -14,8 +15,9 @@
 %% ~~~~~~~~~~~~~~~~~~~~~
 
 start(_StartType, _StartArgs) ->
-    
-    rt53_sup:start_link().
+    {ok, Key} = application:get_env(?RT53_KEY_VAR),
+    {ok, Secret} = application:get_env(?RT53_SECRET_VAR),
+    rt53_sup:start_link(Key, Secret).
 
 stop(_State) ->
     ok.

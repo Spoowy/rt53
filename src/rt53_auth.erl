@@ -29,11 +29,7 @@ start_link(Key, Secret) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Key, Secret], []).
 
 init([Key, Secret]) ->
-    crypto:start(),
-    inets:start(),
-    ssl:start(),
-    {ok, #state{aws_secret_access_key=Secret,
-                aws_access_key_id=Key}}.
+    {ok, #state{aws_secret_access_key=Secret, aws_access_key_id=Key}}.
 
 handle_call(credentials, _From, State) ->
     {reply, {State#state.aws_access_key_id,
