@@ -61,6 +61,6 @@ authorization_header(Key, Secret, Date) ->
  
 aws_time() ->
     {ok, {_Res, Headers, _Body}} = 
-        httpc:request(get, {rt53_req:aws_url("/date"), []}, [], []),
+        httpc:request(get, {rt53:aws_url("/date"), []}, [], []),
     proplists:get_value("date", Headers).
 
