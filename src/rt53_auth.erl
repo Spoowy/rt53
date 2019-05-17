@@ -10,7 +10,7 @@
          terminate/2, code_change/3]).
 
 -include("../include/rt53.hrl").
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {aws_secret_access_key, aws_access_key_id}).
 
@@ -19,7 +19,7 @@
 stop() -> gen_server:cast(?MODULE, stop).
 credentials() -> gen_server:call(?MODULE, credentials).
 authinfo() -> gen_server:call(?MODULE, authinfo).
-    
+
 
 %% ------------------------- Callbacks.
 start_link() ->
@@ -55,12 +55,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% ------------------------- Internal Functions.
 authorization_header(Key, Secret, Date) ->
-    {"AWS3-HTTPS AWSAccessKeyId=" ++ Key ++ ",Algorithm=HMACSHA1,Signature=" 
-     ++ binary_to_list(base64:encode(crypto:sha_mac(Secret, Date))),
+    <<Mac:160/integer>> = crypto:hmac(sha, Secret, Date),
+    % crypto:sha_mac(Secret, Date)
+    io:format("~n ~p, ~p: ~p ~n~n", [?MODULE, Key, key]),
+    {"AWS3-HTTPS AWSAccessKeyId=" ++ Key ++ ",Algorithm=HMACSHA1,Signature="
+     ++ binary_to_list(base64:encode(list_to_binary(integer_to_list(Mac)))),
      Date}.
- 
+
 aws_time() ->
-    {ok, {_Res, Headers, _Body}} = 
+    {ok, {_Res, Headers, _Body}} =
         httpc:request(get, {rt53:aws_url("/date"), []}, [], []),
     proplists:get_value("date", Headers).
-
