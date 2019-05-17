@@ -57,10 +57,14 @@ code_change(_OldVsn, State, _Extra) ->
 authorization_header(Key, Secret, Date) ->
     <<Mac:160/integer>> = crypto:hmac(sha, Secret, Date),
     % crypto:sha_mac(Secret, Date)
-    io:format("~n ~p, ~p: ~p ~n~n", [?MODULE, Key, key]),
-    {"AWS3-HTTPS AWSAccessKeyId=" ++ Key ++ ",Algorithm=HMACSHA1,Signature="
-     ++ binary_to_list(base64:encode(list_to_binary(integer_to_list(Mac)))),
-     Date}.
+    Payload = "AWS4-HMAC-SHA256
+    Credential="++ Key ++ "/" ++ aws_date() ++ "/us-east-1/route53/aws4_request,
+    SignedHeaders=host;range;x-amz-date,
+    Signature=" ++ binary_to_list(base64:encode(list_to_binary(integer_to_list(Mac)))),
+    {Payload, Date}.
+
+aws_date() ->
+    lists:flatten(io_lib:format("~w~2..0w~2..0w", tuple_to_list(date()))).
 
 aws_time() ->
     {ok, {_Res, Headers, _Body}} =
