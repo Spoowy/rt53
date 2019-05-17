@@ -32,10 +32,10 @@ stop() ->
     
 
 %%% ------------------------- External API.
--spec aws_url/1 :: (string()) -> string().
+-spec aws_url(string()) -> string().
 aws_url(Path) -> string:concat(?RT53_URL, Path).
                      
--spec aws_url/2 :: (default | string(), string()) -> string().
+-spec aws_url(default | string(), string()) -> string().
 aws_url(default, Path) -> aws_url(?RT53_API, Path);
 aws_url(Version, Path) -> 
     URL = string:join([?RT53_URL, Version, Path], "/"),
@@ -46,12 +46,12 @@ aws_url(Version, Path) ->
 %% 53 API Reference document, dated 2012-02-29
 %%
 %% -- ListHostedZones, pp. 17.
--spec list_hosted_zones/0 :: () -> hosted_zone_list().
+-spec list_hosted_zones() -> hosted_zone_list().
 list_hosted_zones() ->
     URL = aws_url(default, "hostedzone"),
     parse_hosted_zone_list(send_request(get, URL, [], 200)).
 
--spec list_hosted_zones/2 :: (string(), string()) -> hosted_zone_list().
+-spec list_hosted_zones(string(), string()) -> hosted_zone_list().
 list_hosted_zones(Marker, MaxItems) ->                                      
     URL = aws_url(default, "hostedzone"),
     Params = [{marker, Marker}, {maxitems, MaxItems}],
@@ -70,7 +70,7 @@ zone_list_attributes() ->
     ["Marker", "IsTruncated", "NextMarker", "MaxItems"].
          
 %% -- GetHostedZone, pp. 10
--spec get_hosted_zone/1 :: (string()) -> zone_info(). 
+-spec get_hosted_zone(string()) -> zone_info(). 
 get_hosted_zone(Zone) ->
     ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec),
@@ -80,15 +80,15 @@ get_hosted_zone(Zone) ->
     {PList, {nameserver, NSs}}.
 
 %% -- CreateHostedZone, pp. 3
--spec create_hosted_zone/1 :: (string()) -> new_zone_info().
+-spec create_hosted_zone(string()) -> new_zone_info().
 create_hosted_zone(Name) ->
     create_hosted_zone(Name, binary_to_list(ossp_uuid:make(v4, text)), "").
 
--spec create_hosted_zone/2 :: (string(), string()) -> new_zone_info().
+-spec create_hosted_zone(string(), string()) -> new_zone_info().
 create_hosted_zone(Name, Comment) ->
     create_hosted_zone(Name, binary_to_list(ossp_uuid:make(v4, text)), Comment).
 
--spec create_hosted_zone/3 :: (string(), string(), string()) -> new_zone_info().
+-spec create_hosted_zone(string(), string(), string()) -> new_zone_info().
 create_hosted_zone(Name, CallerReference, Comment) -> 
     Payload = hosted_zone_xml(Name, CallerReference, Comment),
     URL = aws_url(default, "hostedzone"),
@@ -113,7 +113,7 @@ zone_change_attributes() ->
     ["Id", "Status", "SubmittedAt"]. 
 
 %% -- DeleteHostedZone, pp. 14
--spec delete_hosted_zone/1 :: (string()) -> change_info().
+-spec delete_hosted_zone(string()) -> change_info().
 delete_hosted_zone(Zone) ->    
     ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec),
@@ -123,11 +123,11 @@ parse_delete_hosted_zone(Res) ->
     xml_to_plist(Res, "//ChangeInfo", zone_change_attributes()).
 
 %% -- ListResourceRecordSets, pp. 51
--spec list_resource_record_sets/1 :: (string()) -> term().
+-spec list_resource_record_sets(string()) -> term().
 list_resource_record_sets(Zone) ->
     list_resource_record_sets(Zone, []).
 
--spec list_resource_record_sets/2 :: (string(), options()) -> term().
+-spec list_resource_record_sets(string(), options()) -> term().
 list_resource_record_sets(Zone, Opts) ->
     ZoneSpec = zone_spec(Zone),
     URL = aws_url(default, ZoneSpec ++ "/rrset"),
@@ -150,7 +150,7 @@ resource_record_metadata_attributes() ->
      "NextRecordIdentifier"].
 
 %% -- GetChange, pp. 49
--spec get_change/1 :: (string()) -> term().
+-spec get_change(string()) -> term().
 get_change(ChangeID) -> 
     ChangeSpec = change_spec(ChangeID),
     URL = aws_url(default, ChangeSpec),
@@ -170,7 +170,7 @@ change_record_attributes() ->
 %   - weighted alias
 %   - latency
 %   - latency alias
--spec change_resource_record_sets/4 :: (string(), atom(), [term()], string()) ->
+-spec change_resource_record_sets(string(), atom(), [term()], string()) ->
                                                term().
 change_resource_record_sets(Zone, SyntaxType, Parameters, Comment) ->
     ZoneSpec = zone_spec(Zone),
@@ -208,7 +208,7 @@ generate_basic_change_stanzas([{Action, Name, Type, TTL, Value} | T], Res) ->
     generate_basic_change_stanzas(T, [Data | Res]).
 
 %% -- convenience methods.
--spec absolutely_delete_hosted_zone/1 :: (string()) -> term().
+-spec absolutely_delete_hosted_zone(string()) -> term().
 absolutely_delete_hosted_zone(Zone) ->
     delete_entire_record_set(Zone),
     delete_hosted_zone(Zone).
